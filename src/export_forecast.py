@@ -45,29 +45,40 @@ def _fetch_open_meteo_aq_forecast() -> list[dict]:
     We pull 4 days so that after trimming past hours we always have at least
     72 hours of future forecast data.  Returns a list of dicts with 'time'
     and 'aqi' keys.
+
+    Retries up to 3 times with increasing timeout (15s → 30s → 45s)
+    because Open-Meteo's air-quality endpoint is occasionally slow.
     """
-    try:
-        url = "https://air-quality-api.open-meteo.com/v1/air-quality"
-        params = {
-            "latitude": 33.1255,
-            "longitude": 71.5372,
-            "hourly": "us_aqi",
-            "forecast_days": 4,
-            "timezone": "Asia/Karachi",
-        }
-        resp = _requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-        times = data.get("hourly", {}).get("time", [])
-        aqis = data.get("hourly", {}).get("us_aqi", [])
-        result = []
-        for t, a in zip(times, aqis):
-            if a is not None:
-                result.append({"time": t, "aqi": round(float(a), 1)})
-        return result
-    except Exception as exc:
-        logger.warning("Open-Meteo AQ forecast fetch failed: %s", exc)
-        return []
+    import time as _time
+
+    url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+    params = {
+        "latitude": 33.1255,
+        "longitude": 71.5372,
+        "hourly": "us_aqi",
+        "forecast_days": 4,
+        "timezone": "Asia/Karachi",
+    }
+    for attempt in range(1, 4):
+        timeout = 15 * attempt  # 15s, 30s, 45s
+        try:
+            resp = _requests.get(url, params=params, timeout=timeout)
+            resp.raise_for_status()
+            data = resp.json()
+            times = data.get("hourly", {}).get("time", [])
+            aqis = data.get("hourly", {}).get("us_aqi", [])
+            result = []
+            for t, a in zip(times, aqis):
+                if a is not None:
+                    result.append({"time": t, "aqi": round(float(a), 1)})
+            logger.info("Open-Meteo AQ forecast fetched: %d values (attempt %d)", len(result), attempt)
+            return result
+        except Exception as exc:
+            logger.warning("Open-Meteo AQ forecast attempt %d/%d failed: %s", attempt, 3, exc)
+            if attempt < 3:
+                _time.sleep(2 ** attempt)  # 2s, 4s backoff
+    logger.error("All Open-Meteo AQ forecast attempts failed")
+    return []
 
 
 def _current_hour_local() -> pd.Timestamp:
@@ -205,7 +216,7 @@ def export_forecast(source: str = "live") -> Path:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": source,
         "origin": origin.isoformat(),
-        "model": "aqi-hourly-ridge",
+        "model": f"aqi-hourly-{champion_name}",
         "current_aqi": current_aqi,
         "ref_now": ref_now_val,
         "outputs": outputs,

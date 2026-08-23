@@ -27,7 +27,9 @@ The model selection was informed by the following research papers:
 
 ## Architecture
 
-The system uses a **static JSON serving architecture** — predictions are pre-computed by CI pipelines and stored in a separate data repository. The dashboard fetches these JSON files via raw GitHub URLs, giving every visitor a near-instant page load with zero runtime inference.```
+The system uses a **static JSON serving architecture** — predictions are pre-computed by CI pipelines and stored in a separate data repository. The dashboard fetches these JSON files via raw GitHub URLs, giving every visitor a near-instant page load with zero runtime inference.
+
+```
 karAQI (code repo)                      karAQI-data (data repo)
 ───────────────────                     ────────────────────────
 training_pipeline (daily)      ──────►   models/*.joblib, *.keras
@@ -50,7 +52,7 @@ All pipelines run on GitHub Actions. See [docs/cicd-pipelines.md](docs/cicd-pipe
 | Workflow | Schedule (UTC) | What it does | Output |
 |---|---|---|---|
 | `feature_pipeline.yml` | Hourly at `:01` | Incremental data fetch (~1 row), build features, run tests | Feature store (DuckDB) |
-| `forecast_pipeline.yml` | Hourly at `:04` | Run best model inference, fetch Open-Meteo AQ forecast, export JSON | `static_forecast.json` → karAQI-data |
+| `forecast_pipeline.yml` | Hourly at `:04` | Run best model inference, fetch Open-Meteo AQ forecast (with retry), export JSON | `static_forecast.json` → karAQI-data |
 | `training_pipeline.yml` | Daily at `00:00` | Incremental fetch, train Ridge + XGBoost, champion comparison, register in MLflow, export eval JSON | `model_eval.json` + model files → karAQI-data |
 
 > **Incremental fetching:** The feature pipeline runs hourly and fetches only the new data since the last pull (typically ~1 row). Open-Meteo reanalysis data is immutable — historical values never change — so incremental fetching is safe and avoids re-downloading 4 years of data on every run. See [docs/data-sources.md](docs/data-sources.md).
@@ -66,6 +68,8 @@ All pipelines run on GitHub Actions. See [docs/cicd-pipelines.md](docs/cicd-pipe
 The training pipeline trains **2 models** for the hourly 30-output forecast: Ridge and XGBoost. LSTM and Random Forest were evaluated during development but removed from CI: LSTM took 1+ hour to train on CPU (GitHub Actions) and had the worst RMSE (24.21); Random Forest produced a 4.25 GB model file that exceeds GitHub's 100 MB file size limit. The champion is selected by lowest RMSE on the primary output group (hourly points).
 
 30 outputs per forecast origin: 24 hourly points (`t+1h` through `t+24h`), four six-hour block means (`t+25h` through `t+48h`), and two twelve-hour block means (`t+49h` through `t+72h`).
+
+The forecast payload also includes an **Open-Meteo AQ reference forecast** (72h of hourly US AQI from `air-quality-api.open-meteo.com`) for transparent comparison on the dashboard. The fetch uses 3 retries with escalating timeouts (15s/30s/45s) because the Open-Meteo air-quality endpoint is occasionally slow under GitHub Actions shared infrastructure.
 
 ### Hourly Models — Rolling-Origin Evaluation
 
@@ -134,7 +138,9 @@ Protocol: 3 expanding folds, 168-hour test windows, 72-hour embargo.
 | Open-Meteo Weather Archive API | Weather features (temperature, humidity, wind, etc.) | None | Fair use |
 | Open-Meteo Forecast API | Live weather verification | None | Fair use |
 
-All timestamps normalized to `Asia/Karachi` (UTC+5). Historical data spans 2000–present for weather trends, 2022-08-05–present for AQI training. See [docs/data-sources.md](docs/data-sources.md) for the full contract.
+All timestamps normalized to `Asia/Karachi` (UTC+5). Historical data spans 2000–present for weather trends, 2022-08-05–present for AQI training.
+
+**Resilience:** The Open-Meteo air-quality forecast endpoint (`air-quality-api.open-meteo.com`) is occasionally slow under GitHub Actions shared infrastructure. The forecast pipeline retries up to 3 times with escalating timeouts (15s → 30s → 45s) and exponential backoff (2s, 4s) before giving up. If all attempts fail, the forecast is exported without the Open-Meteo comparison line (the dashboard shows `ref_forecast: []`). See [docs/data-sources.md](docs/data-sources.md) for the full contract.
 
 ---
 
