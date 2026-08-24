@@ -1,4 +1,4 @@
-# Evaluation — The Full Project Journey
+# Evolution — The Full Project Journey
 
 This document tells the complete story of how karAQI was built, from the initial research papers to the live dashboard. It is written so that anyone — a reviewer, a teammate, or a future maintainer — can understand every decision, why it was made, and what was learned along the way.
 
@@ -13,7 +13,7 @@ This document tells the complete story of how karAQI was built, from the initial
 5. [Feature Engineering: From Raw Data to Model Inputs](#5-feature-engineering-from-raw-data-to-model-inputs)
 6. [AQI Calculation: Implementing the US EPA Standard](#6-aqi-calculation-implementing-the-us-epa-standard)
 7. [Model Selection: Choosing What to Train](#7-model-selection-choosing-what-to-train)
-8. [Training and Evaluation: The Numbers](#8-training-and-evaluation-the-numbers)
+8. [Training Results: The Numbers](#8-training-results-the-numbers)
 9. [Validation: The Hardening Phase](#9-validation-the-hardening-phase)
 10. [Infrastructure: Feature Store and Model Registry](#10-infrastructure-feature-store-and-model-registry)
 11. [Dashboard: Building the Interface](#11-dashboard-building-the-interface)
@@ -115,7 +115,7 @@ Two target definitions:
 
 ## 7. Model Selection: Choosing What to Train
 
-See `docs/modeling-evaluation.md` for the full scoring methodology.
+See `docs/modeling-evaluation.md` for the full scoring methodology.  
 
 Final shortlist (stratified by family):
 | Family | Model | Score |
@@ -129,13 +129,13 @@ Baselines kept: Persistence (naive), Ridge/MLR.
 
 ---
 
-## 8. Training and Evaluation: The Numbers
+## 8. Training Results: The Numbers
 
 ### Hourly 30-output forecast (the model serving predictions)
 
-Two models trained in CI: Ridge and XGBoost. LSTM, Random Forest, and SARIMA were evaluated during development but removed from CI due to impractical training times and poor performance.
+Two models trained in CI: Ridge and XGBoost. LSTM, Random Forest, and SARIMA were evaluated during development but removed from the production pipeline — LSTM took over an hour to train on CPU with the worst RMSE, and Random Forest produced a 4.25 GB model file that exceeds GitHub's size limit.
 
-Rolling-origin evaluation (3 expanding folds, 168h test windows, 72h embargo):
+Rolling-origin assessment (3 expanding folds, 168h test windows, 72h embargo):
 
 | Model | Hourly RMSE | Six-hour RMSE | Twelve-hour RMSE |
 |---|---|---|---|
@@ -193,7 +193,7 @@ Streamlit dashboard with:
 - Two tabs: "My model" (predictions) and "Open-Meteo" (live reference)
 - 30-output forecast chart with Open-Meteo comparison
 - SHAP explanations (LinearExplainer for Ridge)
-- Model evaluation metrics
+- Model performance metrics
 - Weather insights (26-year trends, AQI seasonality)
 
 ---
@@ -217,13 +217,13 @@ Data was moved from the main karAQI repo to a separate karAQI-data repo to keep 
 
 The training pipeline implements a proper champion comparison:
 
-1. Train today's models (Ridge, RF, XGBoost, LSTM)
-2. Evaluate on rolling-origin holdout
+1. Train today's models (Ridge + XGBoost)
+2. Assess on rolling-origin holdout
 3. Compare best model's RMSE against current champion in MLflow
 4. If better: promote (new version, old version kept)
 5. If worse: keep old champion, log the comparison
 
-This prevents model regression — a bad training day doesn't overwrite a good model.
+This prevents model regression — a bad training day does not overwrite a good model.
 
 ---
 
@@ -240,10 +240,10 @@ training_pipeline.yml (daily 00:00 UTC)
   → src/ingest.py (incremental fetch)
   → src/build_features.py (feature engineering)
   → src/feature_store.py (DuckDB rebuild)
-  → src/train.py (train 6 daily models) + src/train_hourly.py (train 2 hourly models: Ridge, XGBoost)
+  → src/train.py (train daily comparison models) + src/train_hourly.py (train 2 production hourly models: Ridge, XGBoost)
   → Champion comparison (only promote if better)
   → src/model_registry.py (MLflow register)
-  → src/export_eval.py (evaluation JSON)
+  → src/export_eval.py (production model metrics JSON)
       │
       ├──► models/*.joblib             ──────► karAQI-data/models/
       └──► data/model_eval.json      ──────► karAQI-data/data/
@@ -263,7 +263,7 @@ feature_pipeline.yml (hourly :01)
 
                               karAQI-data/data/
                               ├── static_forecast.json (hourly predictions)
-                              ├── model_eval.json (evaluation metrics)
+                              ├── model_eval.json (performance metrics)
                               └── models/ (trained .joblib + .keras files)
                                       │
                                       ▼
@@ -280,7 +280,7 @@ feature_pipeline.yml (hourly :01)
 
 An end-to-end ML pipeline for AQI forecasting using modeled/reanalysis data. It demonstrates:
 - Automated data collection and feature engineering
-- Multiple model families with proper evaluation
+- Multiple model families with proper testing
 - CI/CD with GitHub Actions
 - Feature store and model registry
 - Live dashboard with SHAP explanations
@@ -288,12 +288,11 @@ An end-to-end ML pipeline for AQI forecasting using modeled/reanalysis data. It 
 ### What This Project Is Not
 
 - It does not predict ground-truth AQI (Karak has no ground station)
-- It does not use paid cloud services (100% free/serverless)
-- It does not implement real-time streaming (pre-computed JSON)
+- It does not use paid cloud services
 
 ### Honest Metrics
 
-The hourly Ridge model achieves RMSE ~11 on the primary output group, which means predictions are typically ±11 AQI points off. Category accuracy is ~90% for hourly points. The model beats persistence baselines but the absolute accuracy depends on the quality of the Open-Meteo modeled data.
+The production models (Ridge and XGBoost) achieve RMSE between 9–11 on hourly points, meaning predictions are typically within ±10 AQI points. Category accuracy is ~86–89% for hourly points. The models beat persistence baselines, but absolute accuracy depends on the quality of the Open-Meteo modeled data.
 
 ---
 
@@ -307,3 +306,5 @@ The hourly Ridge model achieves RMSE ~11 on the primary output group, which mean
 6. **Incremental fetching** saves CI time — don't re-download 4 years of data every hour
 7. **Ridge often beats complex models** on small datasets — simplicity wins when n is small
 8. **GitHub Actions cron is best-effort** — expect 5-30 minute delays, design accordingly
+9. **Static JSON serving** eliminates runtime inference costs — the dashboard loads in under a second
+10. **Two-repo architecture** keeps code and data separate — the main repo stays clean, the data repo holds artifacts
