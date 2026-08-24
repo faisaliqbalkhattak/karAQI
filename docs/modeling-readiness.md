@@ -16,9 +16,9 @@ Pre-deployment checklist and validation record for the karAQI pipeline.
 
 ### Model Training
 
-- [x] Daily models training correctly (Ridge, XGBoost, RF, SARIMA, LSTM)
-- [x] Hourly models training correctly (Ridge, XGBoost)
-- [x] Rolling-origin evaluation producing valid metrics
+- [x] Hourly production models training correctly (Ridge, XGBoost)
+- [x] Daily comparison models training correctly (Ridge, XGBoost, RF, SARIMA, LSTM — development only)
+- [x] Rolling-origin assessment producing valid metrics
 - [x] Release gate passing (best model beats persistence)
 - [x] Champion comparison working (only promotes if better)
 
@@ -27,7 +27,7 @@ Pre-deployment checklist and validation record for the karAQI pipeline.
 - [x] MLflow registration working for hourly and daily models
 - [x] Champion alias correctly assigned
 - [x] Model files pushed to karAQI-data
-- [x] Eval JSON pushed to karAQI-data
+- [x] Performance metrics JSON pushed to karAQI-data (production models only)
 
 ### Forecast Pipeline
 
@@ -47,7 +47,7 @@ Pre-deployment checklist and validation record for the karAQI pipeline.
 
 ### Tests
 
-- [x] 38+ tests passing (pytest)
+- [x] 39+ tests passing (pytest)
 - [x] Feature pipeline tests passing
 - [x] Training pipeline tests passing
 - [x] Export forecast tests passing (with proper skips for missing models)
@@ -58,16 +58,17 @@ Pre-deployment checklist and validation record for the karAQI pipeline.
 
 ### Latest Training Run (2026-08-24)
 
-**Hourly models:**
-- Ridge: hourly_points RMSE 10.88, MAE 8.16
+**Hourly production models (served in dashboard):**
 - XGBoost: hourly_points RMSE 8.89, MAE 6.42
-- Champion: XGBoost (lowest average RMSE across all groups)
+- Ridge: hourly_points RMSE 10.88, MAE 8.16
+- Champion: XGBoost (lowest average RMSE across all output groups)
 - Release gate: PASSED
 
-**Daily models:**
+**Daily comparison models (development only, not served):**
 - XGBoost: +1d RMSE 15.78, +2d RMSE 19.40, +3d RMSE 20.72
 - Ridge: +1d RMSE 16.66, +2d RMSE 19.98, +3d RMSE 20.66
 - Best by horizon: XGBoost for +1/+2d, Ridge for +3d
+- Note: These models are trained for comparison only. Only the hourly model is used in production.
 
 ### Pipeline Health
 
