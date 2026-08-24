@@ -340,3 +340,14 @@ karAQI/
 | [docs/mlops-architecture.md](docs/mlops-architecture.md) | Feature store (DuckDB), model registry (MLflow), CI/CD design decisions |
 | [docs/cicd-pipelines.md](docs/cicd-pipelines.md) | GitHub Actions pipeline architecture and troubleshooting |
 | [docs/modeling-readiness.md](docs/modeling-readiness.md) | Pre-deployment checklist and validation record |
+
+---
+
+## Contributors
+
+The contributors shown on this repository are bots set up to automate the CI/CD pipeline:
+
+- **faisaliqbalkhattak** — The owner of this repository.
+- **github-actions[bot]** — Pushes commits to the `karAQI-data` repository on every successful pipeline run. The bot was originally configured here in this repo, which is why GitHub counts it as a contributor to both repositories.
+
+No human contributors other than Faisal Iqbal have contributed to this project.
