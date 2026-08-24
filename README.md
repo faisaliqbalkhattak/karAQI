@@ -2,6 +2,11 @@
 
 A **72-hour US EPA AQI forecast** for Karak, Pakistan, built as an end-to-end machine learning pipeline with automated CI/CD, a feature store, model registry, and a live Streamlit dashboard. The system fetches hourly pollutant and weather data from Open-Meteo (free, keyless), trains multiple ML models daily, and serves pre-computed predictions to every dashboard visitor with near-instant page load.
 
+## Project Name Explanation
+
+1. **Karaqi** stands for **Karak Air Quality Index**.
+2. **Karaqi** refers to the people of Karak, serving as a direct reference to the region and its residents.
+
 > **Data disclaimer:** Karak has no local ground-air-quality monitor. All features and the AQI target are derived from Open-Meteo CAMS modeled/reanalysis data, not station measurements. Results describe model-to-model agreement, not ground-truth station accuracy.
 
 ---
@@ -21,26 +26,29 @@ The model selection was informed by the following research papers:
 
 ## Live Dashboard
 
-**[kaqindex.streamlit.app](https://kaqindex.streamlit.app/)**
+**[kaqindex.streamlit.app](https://karaqi.streamlit.app/)**
 
 ---
 
 ## Architecture
 
-The system uses a **static JSON serving architecture** — predictions are pre-computed by CI pipelines and stored in a separate data repository. The dashboard fetches these JSON files via raw GitHub URLs, giving every visitor a near-instant page load with zero runtime inference.
+The system uses a **static JSON serving architecture** — predictions are pre-computed by CI pipelines and stored in a separate data repository **[karAQI-data](https://github.com/faisaliqbalkhattak/karAQI-data)**. The dashboard fetches these JSON files via GitHub URLs, giving every visitor a near-instant page load with zero runtime inference.
 
 ```
 karAQI (code repo)                      karAQI-data (data repo)
 ───────────────────                     ────────────────────────
-training_pipeline (daily)      ──────►   models/*.joblib, *.keras
-  trains Ridge + LSTM                    models/*_models.json
-  pushes model files + eval      ──────► data/model_eval.json
+training_pipeline (daily)      ──────►   models/*.joblib
+  trains Ridge + XGBoost                  models/*_models.json
+  registers in MLflow (model registry)    data/model_eval.json
+  pushes model files + eval      ──────►
 
 forecast_pipeline (hourly)      ◄──────  models/*.joblib (downloads for inference)
-  loads model from MLflow/karAQI-data    data/static_forecast.json (pushes result)
+  loads champion model from karAQI-data   data/static_forecast.json (pushes result)
   reads features from DuckDB
+  (feature store)
 
 feature_pipeline (hourly)               data/ (raw CSVs, feature store)
+  populates DuckDB at data/feature_store/
 
                                        ◄── Dashboard reads via raw URLs
 ```
@@ -51,13 +59,13 @@ All pipelines run on GitHub Actions. See [docs/cicd-pipelines.md](docs/cicd-pipe
 
 | Workflow | Schedule (UTC) | What it does | Output |
 |---|---|---|---|
-| `feature_pipeline.yml` | Hourly at `:01` | Incremental data fetch (~1 row), build features, run tests | Feature store (DuckDB) |
-| `forecast_pipeline.yml` | Hourly at `:04` | Run best model inference, fetch Open-Meteo AQ forecast (with retry), export JSON | `static_forecast.json` → karAQI-data |
-| `training_pipeline.yml` | Daily at `00:00` | Incremental fetch, train Ridge + XGBoost, champion comparison, register in MLflow, export eval JSON | `model_eval.json` + model files → karAQI-data |
+| `feature_pipeline.yml` | Hourly at `:01` | Incremental data fetch (~1 row), build features, backfill DuckDB, run tests | Feature store (DuckDB) |
+| `forecast_pipeline.yml` | Hourly at `:04` | Fetch ~1 new row, backfill DuckDB, load champion model from karAQI-data, run inference, fetch Open-Meteo AQ forecast (with retry), export JSON | `static_forecast.json` → karAQI-data |
+| `training_pipeline.yml` | Daily at `00:00` | Incremental fetch, train Ridge + XGBoost, rolling-origin evaluation, champion comparison, register in MLflow (model registry), export eval JSON | `model_eval.json` + model files → karAQI-data |
 
 > **Incremental fetching:** The feature pipeline runs hourly and fetches only the new data since the last pull (typically ~1 row). Open-Meteo reanalysis data is immutable — historical values never change — so incremental fetching is safe and avoids re-downloading 4 years of data on every run. See [docs/data-sources.md](docs/data-sources.md).
 
-> **Champion comparison:** The training pipeline compares new model metrics against the current champion in MLflow. Only promotes if the new model is better on hourly_points RMSE. If worse, the old champion is kept and the comparison is logged. No silent fallbacks — the pipeline fails loudly if the registry is empty.
+> **Champion comparison:** The training pipeline compares new model metrics against the current champion in MLflow. Only promotes if the new model is better on average RMSE across all output groups. If worse, the old champion is kept and the comparison is logged.
 
 > **GitHub Actions timing caveat:** Cron triggers are best-effort, not precise. Workflows are frequently delayed 5–30 minutes (sometimes longer) due to platform load — see [github/community#156282](https://github.com/orgs/community/discussions/156282). If the dashboard shows a previous hour's AQI, the CI pipeline was delayed. The data is still correct — it reflects the most recent successful run. See [docs/cicd-pipelines.md](docs/cicd-pipelines.md).
 
@@ -65,7 +73,7 @@ All pipelines run on GitHub Actions. See [docs/cicd-pipelines.md](docs/cicd-pipe
 
 ## Model Performance (Live Dashboard Metrics)
 
-The training pipeline trains **2 models** for the hourly 30-output forecast: Ridge and XGBoost. LSTM and Random Forest were evaluated during development but removed from CI: LSTM took 1+ hour to train on CPU (GitHub Actions) and had the worst RMSE (24.21); Random Forest produced a 4.25 GB model file that exceeds GitHub's 100 MB file size limit. The champion is selected by lowest RMSE on the primary output group (hourly points).
+The training pipeline trains **2 models** for the hourly 30-output forecast: Ridge and XGBoost. The champion is selected by lowest average RMSE across all three output groups (hourly points, six-hour means, twelve-hour means).
 
 30 outputs per forecast origin: 24 hourly points (`t+1h` through `t+24h`), four six-hour block means (`t+25h` through `t+48h`), and two twelve-hour block means (`t+49h` through `t+72h`).
 
@@ -124,7 +132,7 @@ Protocol: 3 expanding folds, 168-hour test windows, 72-hour embargo.
 - Hourly forecast timeline (next 24h, hour by hour)
 - Extended forecast (6h and 12h block means for 24–72h)
 - Model comparison with Open-Meteo reference
-- SHAP explanations (LinearExplainer for the Ridge pipeline)
+- SHAP explanations (LinearExplainer for feature importance)
 - Model evaluation metrics (MLflow registry, rolling-origin results)
 - Weather insights (26-year trends and AQI seasonality)
 
@@ -157,7 +165,7 @@ Both are derived from Open-Meteo modeled concentrations, not ground-station meas
 
 ## Environment Setup
 
-Python 3.11 is the only supported version. Run all commands from this `development/` directory.
+Python 3.11 is the only supported version. Run all commands from the project root.
 
 ```bash
 python -m venv .venv
@@ -213,10 +221,11 @@ streamlit run app/dashboard.py
 
 ## Feature Store and Model Registry
 
-| Component | Implementation | Why |
+| Component | Implementation | Where It Lives |
 |---|---|---|
-| Feature store | DuckDB (`data/feature_store/karak_feature_store.duckdb`) | Serverless, no API key, free, works on Windows |
-| Model registry | MLflow file-backed (`models/mlruns/`) | No tracking server needed, satisfies serverless requirement |
+| Feature store | DuckDB (embedded, file-based) | Created at runtime at `data/feature_store/karak_feature_store.duckdb` (not in git) |
+| Model registry | MLflow file-backed | Created at runtime at `models/mlruns/` (not in git) |
+| Durable model storage | karAQI-data GitHub repo | `models/*.joblib` + `models/*_models.json` |
 
 ### What a Model Registry Is
 
@@ -224,13 +233,9 @@ A model registry manages the full ML model lifecycle: version control, staging (
 
 ### What We Use
 
-Our MLflow instance is **file-backed** — it stores model versions and metadata in local `mlruns/` directories, not on a persistent server. The trained model binary (`.joblib`) is also pushed to the `karAQI-data` GitHub repo so the forecast pipeline can download it. This functions as a lightweight model registry: it tracks which model version is the champion, logs metrics, and supports version-based loading. For a production system, a server-backed registry (e.g., MLflow Tracking Server on Databricks, Vertex AI) would provide stronger guarantees around access control, audit trails, and model serving integration. For this project's scale and the assignment's serverless requirement, the file-backed approach is sufficient.
+Our MLflow instance is **file-backed** — it stores model versions and metadata in local directories, not on a persistent server. The trained model binary (`.joblib`) is pushed to the `karAQI-data` GitHub repo so the forecast pipeline can download it. This functions as a lightweight model registry: it tracks which model version is the champion, logs metrics, and supports version-based loading.
 
-### Why Model Files Are Also in GitHub
-
-The `karAQI-data` repo stores the actual model binaries (`.joblib` files) because the forecast pipeline on GitHub Actions needs to download them before running inference. MLflow's file-backed store only exists within the CI runner (ephemeral), so the model files must be persisted somewhere the forecast pipeline can access them. GitHub repo storage serves as the durable artifact store.
-
-The feature store is used by the **training and forecast pipelines** (not the dashboard). The forecast pipeline reads features from DuckDB (`--source store`). The model registry is used by the **forecast pipeline** to load the champion model for inference. The dashboard reads pre-computed JSON for speed.
+The feature store (DuckDB) is created and populated by the feature pipeline at runtime. It is not committed to git — each CI runner creates its own instance. The training and forecast pipelines read from it; the dashboard does not.
 
 Registered models: `aqi-hourly` (champion, hourly 30-output), `aqi-daily-h1`, `aqi-daily-h2`, `aqi-daily-h3`.
 
@@ -251,30 +256,40 @@ karAQI/
 │   ├── aqi.py                    # US EPA AQI calculation
 │   ├── ingest.py                 # Data ingestion from Open-Meteo
 │   ├── build_features.py         # Feature engineering
-│   ├── feature_store.py          # DuckDB feature store
+│   ├── feature_store.py          # DuckDB feature store (runtime)
 │   ├── train.py                  # Daily model training
 │   ├── train_hourly.py           # Hourly model training
 │   ├── inference_hourly.py       # Hourly inference (30-output contract)
-│   ├── model_registry.py         # MLflow model registry
-│   └── export_forecast.py        # Export forecast JSON to karAQI-data
-├── models/                       # Model artifacts (joblib, keras, JSON manifests)
+│   ├── model_registry.py         # MLflow model registry (runtime)
+│   ├── export_forecast.py        # Export forecast JSON to karAQI-data
+│   └── export_eval.py            # Export evaluation JSON
 ├── notebooks/                    # EDA and analysis notebooks
 │   ├── 01_raw_data_check.ipynb   # Data quality checks
 │   ├── 02_feature_eda.ipynb      # Feature EDA
 │   ├── 03_live_open_meteo_check.ipynb  # Live API verification
 │   └── 04_karak_weather_trends.ipynb   # 26-year weather trends
-├── tests/                        # Automated test suite (41 tests)
+├── tests/                        # Automated test suite (38+ tests)
 ├── docs/                         # Detailed documentation
 │   ├── evolution.md              # Full project journey narrative
 │   ├── modeling-evaluation.md    # Model selection, metrics, evaluation protocol
 │   ├── data-sources.md           # API contracts, data quality rules
 │   ├── mlops-architecture.md     # Feature store, registry, CI/CD decisions
 │   ├── cicd-pipelines.md         # CI pipeline architecture + troubleshooting
-│   └── modeling-readiness.md     # Modeling gate checklist
+│   └── modeling-readiness.md     # Pre-deployment checklist
 ├── .github/workflows/            # CI/CD pipelines
+│   ├── feature_pipeline.yml      # Hourly data fetch + feature build
+│   ├── forecast_pipeline.yml     # Hourly inference + JSON export
+│   └── training_pipeline.yml     # Daily model training + registration
 ├── requirements.txt              # Full dev dependencies
+├── requirements-feature.txt      # Feature pipeline CI deps
+├── requirements-forecast.txt     # Forecast pipeline CI deps
+├── requirements-training.txt     # Training pipeline CI deps
 └── README.md                     # This file
 ```
+
+**Runtime directories** (created by pipelines, not in git):
+- `data/` — Raw CSVs, processed features, DuckDB feature store
+- `models/` — Trained model artifacts, MLflow registry
 
 ---
 
@@ -294,6 +309,6 @@ karAQI/
 | [docs/evolution.md](docs/evolution.md) | Full project journey — from research papers to deployment |
 | [docs/modeling-evaluation.md](docs/modeling-evaluation.md) | Model selection methodology, metrics, rolling-origin protocol |
 | [docs/data-sources.md](docs/data-sources.md) | API contracts, data quality rules, why Open-Meteo was chosen |
-| [docs/mlops-architecture.md](docs/mlops-architecture.md) | Feature store (DuckDB), model registry (MLflow), CI/CD decisions |
+| [docs/mlops-architecture.md](docs/mlops-architecture.md) | Feature store (DuckDB), model registry (MLflow), CI/CD design decisions |
 | [docs/cicd-pipelines.md](docs/cicd-pipelines.md) | GitHub Actions pipeline architecture and troubleshooting |
 | [docs/modeling-readiness.md](docs/modeling-readiness.md) | Pre-deployment checklist and validation record |

@@ -133,7 +133,7 @@ Baselines kept: Persistence (naive), Ridge/MLR.
 
 ### Hourly 30-output forecast (the model serving predictions)
 
-Two models trained in CI: Ridge and XGBoost. LSTM and Random Forest were evaluated during development but removed from CI: LSTM took 1+ hour to train on CPU (GitHub Actions has no GPU) and had the worst RMSE (24.21); Random Forest produced a 4.25 GB model file that exceeds GitHub's 100 MB file size limit.
+Two models trained in CI: Ridge and XGBoost. LSTM, Random Forest, and SARIMA were evaluated during development but removed from CI due to impractical training times and poor performance.
 
 Rolling-origin evaluation (3 expanding folds, 168h test windows, 72h embargo):
 

@@ -54,7 +54,7 @@ forecast_pipeline.yml (hourly :04)
 |---|---|---|---|---|
 | Feature | `1 * * * *` | XX:01 +5h | Incremental fetch, feature build, tests | ~1 min |
 | Forecast | `4 * * * *` | XX:04 +5h | Inference + JSON export | ~45 sec |
-| Training | `0 0 * * *` | 05:00 +5h | Incremental fetch, train 4 models, register, export | ~8 min |
+| Training | `0 0 * * *` | 05:00 +5h | Incremental fetch, train Ridge + XGBoost, champion comparison, register, export | ~8 min |
 
 ### Why These Specific Minutes?
 
@@ -71,8 +71,8 @@ The training pipeline runs two training scripts:
 ```yaml
 - name: Train models from the feature store
   run: |
-    python -m src.train --store        # daily models (Ridge, RF, XGBoost, SARIMA, LSTM)
-    python -m src.train_hourly --store  # hourly 30-output models (Ridge, XGBoost)
+    python -m src.train --store        # daily models (Ridge, RF, XGBoost, SARIMA, LSTM for evaluation)
+    python -m src.train_hourly --store  # hourly 30-output models (Ridge, XGBoost for production)
 ```
 
 ### Champion Comparison

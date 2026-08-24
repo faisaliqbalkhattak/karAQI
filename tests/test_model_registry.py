@@ -72,12 +72,8 @@ def test_register_and_load_hourly_champion(tmp_path):
     assert len(np.asarray(prediction).reshape(-1)) == 30
 
 
-def test_load_falls_back_to_local_artifact_when_registry_empty(tmp_path):
-    # No MLflow registration: load_hourly_model must still work if the local
-    # joblib exists. Point it at the real local artifact only when present.
-    from src import config
-
-    if not config.PROJECT_ROOT.joinpath("models/aqi_forecast_hourly_ridge.joblib").exists():
-        pytest.skip("No local hourly Ridge artifact present.")
-    loaded = load_hourly_model(store_dir=tmp_path / "empty_mlruns")
-    assert hasattr(loaded, "predict")
+def test_load_raises_when_registry_empty_and_no_artifact(tmp_path):
+    # Without fallback: load_hourly_model must fail if the MLflow registry
+    # has no champion and no local artifact is present.
+    with pytest.raises(FileNotFoundError, match="MLflow registry has no champion"):
+        load_hourly_model(store_dir=tmp_path / "empty_mlruns")
