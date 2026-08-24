@@ -11,6 +11,34 @@ A **72-hour US EPA AQI forecast** for Karak, Pakistan, built as an end-to-end ma
 
 ---
 
+> **⚠️ IMPORTANT: This project uses TWO separate GitHub repositories.**
+>
+> | Repository | What it contains | Link |
+> |---|---|---|
+> | **karAQI** (this repo) | Source code, CI/CD pipelines, tests, documentation | [faisaliqbalkhattak/karAQI](https://github.com/faisaliqbalkhattak/karAQI) |
+> | **karAQI-data** | Trained model files, forecast JSON, evaluation metrics, weather images | [faisaliqbalkhattak/karAQI-data](https://github.com/faisaliqbalkhattak/karAQI-data) |
+>
+> The code repo contains **zero** model files, **zero** data files, and **zero** generated artifacts. All ML outputs live in the data repo. The CI pipelines bridge the two: training pushes model files to karAQI-data, the forecast pipeline reads them back for inference.
+>
+> This two-repo architecture keeps the code lightweight, avoids git history bloat from binary model files, and ensures the dashboard can fetch pre-computed predictions via raw GitHub URLs with near-instant page load.
+
+---
+
+## Why Static JSON Serving (Not Runtime Inference)
+
+Most ML dashboards load the model at page load and run inference for every visitor. This is slow — especially on Streamlit Cloud where cold starts are common.
+
+**karAQI uses a different approach:** CI pipelines pre-compute all predictions and store them as JSON files in the `karAQI-data` repo. The dashboard fetches these pre-computed JSONs via raw GitHub URLs. No model is loaded. No inference runs. Every visitor gets the same near-instant page load.
+
+| Approach | Page Load | Model Loading | API Calls |
+|---|---|---|---|
+| Runtime inference | 5–15 seconds | Every page load | Every page load |
+| **Static JSON (karAQI)** | **< 1 second** | **None** | **None (cached 5 min)** |
+
+The tradeoff: predictions are at most 1 hour old (refreshed hourly by CI). For a weather/AQI dashboard, this is acceptable — conditions don't change faster than that.
+
+---
+
 ## Papers Reviewed
 
 The model selection was informed by the following research papers:
