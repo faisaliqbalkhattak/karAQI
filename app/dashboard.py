@@ -650,6 +650,7 @@ def render_main_chart(
     rows: pd.DataFrame,
     ref_series: pd.Series,
     view: str,
+    model_label: str = "",
 ) -> None:
     points = rows[rows["kind"] == "point"].copy()
     blocks = rows[rows["kind"] != "point"].copy()
@@ -718,7 +719,7 @@ def render_main_chart(
     st.altair_chart(chart, use_container_width=True)
     swatches = (
         f'<div style="font-size:15px; color:{MUTED}; display:flex; gap:18px; padding:2px 2px 8px; flex-wrap:wrap;">'
-        f'<span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:3px;background:{ORANGE_700};border-radius:2px;"></span> Our model (Ridge)</span>'
+        f'<span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:3px;background:{ORANGE_700};border-radius:2px;"></span> Our model ({model_label.split()[0].capitalize() if model_label else "champion"})</span>'
         f'<span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:3px;background:{REF_GREEN};border-radius:2px;border-top:2px dashed {REF_GREEN};"></span> Live from Open-Meteo (US AQI\u202f\u200a)</span>'
         f'<span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:18px;height:6px;background:#8f2f12;border-radius:2px;"></span> Six/twelve-hour means (our model)</span>'
         "</div>"
@@ -809,6 +810,30 @@ def render_output_table(rows: pd.DataFrame) -> None:
     st.dataframe(display, use_container_width=True, hide_index=True)
 
 
+# ---------------------------------------------------------------------------
+# Development-only model reference metrics (hardcoded in dashboard, not in data repo)
+# These models were evaluated during development but are NOT trained or served
+# in the production pipeline.  Their metrics are fixed reference values from
+# the last evaluation run — they do not change when the pipeline retrains.
+# ---------------------------------------------------------------------------
+_DEV_HOURLY_HOLDOUT = [
+    {"model": "persistence", "group": "hourly_points", "rmse": 14.42, "mae": 9.63, "r2": 0.623, "note": "baseline"},
+    {"model": "persistence", "group": "six_hour_means", "rmse": 22.15, "mae": 16.50, "r2": 0.141, "note": "baseline"},
+    {"model": "persistence", "group": "twelve_hour_means", "rmse": 25.37, "mae": 19.31, "r2": -0.177, "note": "baseline"},
+    {"model": "seasonal_persistence", "group": "hourly_points", "rmse": 17.98, "mae": 12.87, "r2": 0.460, "note": "baseline"},
+    {"model": "seasonal_persistence", "group": "six_hour_means", "rmse": 22.91, "mae": 17.03, "r2": 0.085, "note": "baseline"},
+    {"model": "seasonal_persistence", "group": "twelve_hour_means", "rmse": 25.41, "mae": 19.01, "r2": -0.179, "note": "baseline"},
+]
+_DEV_DAILY_HOLDOUT = [
+    {"model": "ridge", "1d_rmse": 16.61, "2d_rmse": 19.92, "3d_rmse": 20.55, "note": "development-only"},
+    {"model": "random_forest", "1d_rmse": 16.26, "2d_rmse": 19.52, "3d_rmse": 20.73, "note": "development-only"},
+    {"model": "xgboost", "1d_rmse": 15.77, "2d_rmse": 19.47, "3d_rmse": 20.57, "note": "development-only"},
+    {"model": "sarima", "1d_rmse": 26.99, "2d_rmse": 38.84, "3d_rmse": 60.18, "note": "development-only"},
+    {"model": "lstm", "1d_rmse": 27.42, "2d_rmse": 26.33, "3d_rmse": 25.14, "note": "development-only"},
+    {"model": "persistence", "1d_rmse": 18.58, "2d_rmse": 22.99, "3d_rmse": 25.65, "note": "baseline"},
+]
+
+
 def render_model_history() -> None:
     eval_data = _load_model_eval()
     if not eval_data:
@@ -821,18 +846,28 @@ def render_model_history() -> None:
         st.markdown(
             f'<div style="font-size:16px; color:{MUTED}; margin-bottom:10px; line-height:1.6;">'
             "MLflow tracks every training run and registers the best-performing model for each horizon. "
-            "Each row is a registered model: the name identifies the target (e.g. <b>aqi-hourly-ridge</b> = our hourly Ridge model), "
+            "Each row is a registered model: the name identifies the target (e.g. <b>aqi-hourly-xgboost</b> = our hourly XGBoost model), "
             "the version is the training iteration, and the alias (e.g. <b>champion</b>) marks which version is currently served. "
-            "When the daily training pipeline runs, it re-evaluates all models and promotes the winner to champion.</div>",
+            "When the training pipeline runs, it re-evaluates all models and promotes the winner to champion.</div>",
             unsafe_allow_html=True,
         )
         st.dataframe(pd.DataFrame(registry), use_container_width=True, hide_index=True)
     else:
         st.caption("Registry unavailable.")
 
+    st.markdown(
+        f'<div style="font-size:13px; color:{INFO_BLUE_TEXT}; margin:8px 0 14px; padding:8px 12px; '
+        f'background:#e8f0fe; border-radius:6px;">'
+        '<b>Production models only.</b> The tables below show metrics for models trained and served '
+        'by the CI pipeline (Ridge + XGBoost).  Baselines (persistence) and development-only '
+        'models (LSTM, SARIMA, Random Forest) are shown separately as fixed reference values '
+        'from the last local evaluation run.</div>',
+        unsafe_allow_html=True,
+    )
+
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Hourly holdout (72h purge)")
+        st.subheader("Hourly holdout \u2014 production models")
         hourly = eval_data.get("hourly_holdout", [])
         if hourly:
             grouped = pd.DataFrame(hourly)
@@ -853,18 +888,22 @@ def render_model_history() -> None:
         else:
             st.info("No hourly holdout data available.")
 
+        st.caption("Baselines and development-only models (fixed reference):")
+        st.dataframe(pd.DataFrame(_DEV_HOURLY_HOLDOUT), use_container_width=True, hide_index=True)
+
     with col2:
-        st.subheader("Daily holdout (+1/+2/+3 days)")
-        daily = eval_data.get("daily_holdout", {})
-        if daily and "rows" in daily:
-            pivot = pd.DataFrame(daily["rows"]).set_index("model")
-            st.dataframe(pivot, use_container_width=True)
-        else:
-            st.info("No daily holdout data available.")
+        st.subheader("Daily holdout (+1/+2/+3 days) \u2014 development reference")
+        st.markdown(
+            f'<div style="font-size:13px; color:{MUTED}; margin-bottom:8px;">'
+            'The daily training pipeline is used for model comparison only.  '
+            'Only the hourly model is served in production.</div>',
+            unsafe_allow_html=True,
+        )
+        st.dataframe(pd.DataFrame(_DEV_DAILY_HOLDOUT), use_container_width=True, hide_index=True)
 
     rolling = eval_data.get("rolling_origin", [])
     if rolling:
-        st.subheader("Rolling-origin evaluation (3 expanding folds, 72h embargo)")
+        st.subheader("Rolling-origin evaluation (3 expanding folds, 72h embargo) \u2014 production models")
         st.markdown(
             f'<div style="font-size:16px; color:{MUTED}; margin-bottom:10px; line-height:1.6;">'
             "A more realistic evaluation than a single train/test split. The model is trained on expanding windows "
@@ -1182,7 +1221,7 @@ def main() -> None:
         horizontal=True,
         label_visibility="collapsed",
     )
-    render_main_chart(origin, rows, ref_series, view)
+    render_main_chart(origin, rows, ref_series, view, model_label=model_label)
 
     section_header("Extended forecast", "Beyond 24 hours \u2014 six- and twelve-hour means")
     render_block_means(rows)

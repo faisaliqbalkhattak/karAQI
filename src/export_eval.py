@@ -2,10 +2,12 @@
 
 The training pipeline runs this after training to pre-compute:
 - Model registry status
-- Hourly holdout stats (RMSE/MAE/R2 per model per group)
-- Daily holdout stats (RMSE/MAE/R2 per model per horizon)
-- Rolling-origin evaluation stats
+- Hourly holdout stats (RMSE/MAE/R2) for production models only (Ridge + XGBoost)
+- Rolling-origin evaluation stats for production models only
 - SHAP explanations for the latest prediction (top features)
+
+Development-only model metrics (LSTM, SARIMA, persistence baselines) are
+hardcoded in the dashboard code — they do not belong in the data repo.
 
 The dashboard reads this JSON instead of trying to load local CSVs
 that don't exist on Streamlit Cloud.
@@ -60,11 +62,13 @@ def _export_eval() -> Path:
         logger.warning("Registry unavailable: %s", exc)
         result["registry"] = []
 
-    # --- Hourly holdout ---
+    # --- Hourly holdout (production models only) ---
+    PRODUCTION_MODELS = {"ridge", "xgboost"}
     hourly_path = config.DATA_PROCESSED_DIR / "hourly_model_comparison.csv"
     if hourly_path.exists():
         try:
             df = pd.read_csv(hourly_path)
+            df = df[df["model"].isin(PRODUCTION_MODELS)]
             grouped = (
                 df.groupby(["model", "group"])[["rmse", "mae", "r2"]]
                 .mean()
@@ -78,33 +82,17 @@ def _export_eval() -> Path:
     else:
         result["hourly_holdout"] = []
 
-    # --- Daily holdout ---
-    daily_path = config.DATA_PROCESSED_DIR / "model_comparison.csv"
-    if daily_path.exists():
-        try:
-            df = pd.read_csv(daily_path)
-            pivot = df.pivot_table(
-                index="model", columns="horizon_days", values="rmse"
-            ).round(2)
-            # Flatten into rows like {"model": "persistence", "1d_rmse": 18.5, "2d_rmse": 22.9, ...}
-            records = []
-            for model, row in pivot.iterrows():
-                rec = {"model": model}
-                for col in pivot.columns:
-                    rec[f"{col}d_rmse"] = row[col]
-                records.append(rec)
-            result["daily_holdout"] = {"rows": records}
-        except Exception as exc:
-            logger.warning("Daily holdout read failed: %s", exc)
-            result["daily_holdout"] = {}
-    else:
-        result["daily_holdout"] = {}
+    # --- Daily holdout (not exported) ---
+    # The daily training pipeline trains all models for comparison, but only
+    # the hourly model is used in production.  Daily model metrics are
+    # hardcoded in the dashboard as development reference data.
 
-    # --- Rolling-origin evaluation ---
+    # --- Rolling-origin evaluation (production models only) ---
     rolling_path = config.DATA_PROCESSED_DIR / "hourly_rolling_origin_comparison.csv"
     if rolling_path.exists():
         try:
             df = pd.read_csv(rolling_path)
+            df = df[df["model"].isin(PRODUCTION_MODELS)]
             grouped = (
                 df.groupby(["model", "group"])[
                     ["mse", "rmse", "mae", "r2", "category_accuracy", "high_aqi_recall"]
