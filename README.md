@@ -1,5 +1,8 @@
 # karAQI — Karak Air Quality Index Predictor
 
+> **📄 Project Report:** [karAQI_project_report.pdf](karAQI_project_report.pdf) — Full research paper with methodology, metrics, and architecture.
+> **📊 Presentation:** [karAQI-slide-deck.pdf](karAQI-slide-deck.pdf) — 9-slide deck for the 10Pearls Shine internship.
+
 A **72-hour US EPA AQI forecast** for Karak, Pakistan, built as an end-to-end machine learning pipeline with automated CI/CD, a feature store, model registry, and a live Streamlit dashboard. The system fetches hourly pollutant and weather data from Open-Meteo (free, keyless), trains multiple ML models daily, and serves pre-computed predictions to every dashboard visitor with near-instant page load.
 
 ## Project Name Explanation
@@ -340,6 +343,15 @@ karAQI/
 | [docs/mlops-architecture.md](docs/mlops-architecture.md) | Feature store (DuckDB), model registry (MLflow), CI/CD design decisions |
 | [docs/cicd-pipelines.md](docs/cicd-pipelines.md) | GitHub Actions pipeline architecture and troubleshooting |
 | [docs/modeling-readiness.md](docs/modeling-readiness.md) | Pre-deployment checklist and validation record |
+
+---
+
+## Project Report and Presentation
+
+| Document | Description |
+|---|---|
+| [karAQI_project_report.pdf](karAQI_project_report.pdf) | Full research paper — problem statement, related work, methodology, architecture, results, conclusion |
+| [karAQI-slide-deck.pdf](karAQI-slide-deck.pdf) | Presentation slides — 9-slide overview for the 10Pearls Shine internship demo |
 
 ---
 
