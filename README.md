@@ -1,13 +1,13 @@
 # karAQI — Karak Air Quality Index Predictor
 
-> **📄 Project Report:** [karAQI_project_report.pdf](karAQI_project_report.pdf) — Full research paper with methodology, metrics, and architecture.
-> **📊 Presentation:** [karAQI-slide-deck.pdf](karAQI-slide-deck.pdf) — 9-slide deck for the 10Pearls Shine internship.
+> ** Project Report:** [karAQI_project_report.pdf](karAQI_project_report.pdf) — Full research paper style report with methodology, metrics, and architecture.
+> ** Presentation:** [karAQI-slide-deck.pdf](karAQI-slide-deck.pdf) — 9-slide deck for the 10Pearls Shine internship.
 
 A **72-hour US EPA AQI forecast** for Karak, Pakistan, built as an end-to-end machine learning pipeline with automated CI/CD, a feature store, model registry, and a live Streamlit dashboard. The system fetches hourly pollutant and weather data from Open-Meteo (free, keyless), trains multiple ML models daily, and serves pre-computed predictions to every dashboard visitor with near-instant page load.
 
 ## Project Name Explanation
 
-1. **Karaqi** stands for **Karak Air Quality Index**.
+1. **KarAQI** stands for **Karak Air Quality Index**.
 2. **Karaqi** refers to the people of Karak, serving as a direct reference to the region and its residents.
 
 > **Data disclaimer:** Karak has no local ground-air-quality monitor. All features and the AQI target are derived from Open-Meteo CAMS modeled/reanalysis data, not station measurements. Results describe model-to-model agreement, not ground-truth station accuracy.
@@ -110,7 +110,7 @@ The training pipeline trains **2 models** for the hourly 30-output forecast: Rid
 
 The forecast payload also includes an **Open-Meteo AQ reference forecast** (72h of hourly US AQI from `air-quality-api.open-meteo.com`) for transparent comparison on the dashboard. The fetch uses 3 retries with escalating timeouts (15s/30s/45s) because the Open-Meteo air-quality endpoint is occasionally slow under GitHub Actions shared infrastructure.
 
-### Hourly Models — Rolling-Origin Evaluation
+### Hourly Model: Rolling-Origin Evaluation for the best model
 
 Protocol: 3 expanding folds, 168-hour test windows, 72-hour embargo.
 
@@ -224,6 +224,7 @@ python -m venv .venv
 
 ```bash
 # 1. Fetch data
+python -m src.ingest
 python -m src.build_features --fetch
 
 # 2. Backfill feature store
@@ -326,10 +327,9 @@ karAQI/
 
 ## Deployment
 
-1. Push to GitHub (`faisaliqbalkhattak/karAQI`)
-2. [Streamlit Cloud](https://share.streamlit.io) → New app → `karAQI` → `app/dashboard.py`
-3. Ensure `karAQI-data` repo exists with the same owner
-4. Set `DATA_REPO_TOKEN` secret in karAQI repo settings (fine-grained PAT with Contents: Read/Write on karAQI-data only)
+1. [Streamlit Cloud](https://share.streamlit.io) → New app → `karAQI` → `app/dashboard.py`
+2. Ensure `karAQI-data` repo exists with the same owner
+3. Set `DATA_REPO_TOKEN` secret in karAQI repo settings (fine-grained PAT with Contents: Read/Write on karAQI-data only)
 
 ---
 
@@ -362,4 +362,4 @@ The contributors shown on this repository are bots set up to automate the CI/CD 
 - **faisaliqbalkhattak** — The owner of this repository.
 - **github-actions[bot]** — Pushes commits to the `karAQI-data` repository on every successful pipeline run. The bot was originally configured here in this repo, which is why GitHub counts it as a contributor to both repositories.
 
-No human contributors other than Faisal Iqbal have contributed to this project.
+No human contributors other than [Faisal Iqbal](https://www.linkedin.com/in/faisaliqbalkhattak) have contributed to this project.
