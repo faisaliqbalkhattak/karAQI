@@ -151,7 +151,7 @@ https://air-quality-api.open-meteo.com/v1/air-quality?forecast=true
 
 ## Incremental Fetching
 
-The feature pipeline runs hourly and fetches only new data since the last pull (typically ~1 row). This avoids re-downloading 4 years of data on every run.
+When active, the feature pipeline runs hourly and fetches only new data since the last pull (typically ~1 row). This avoids re-downloading 4 years of data on every run. The feature pipeline is currently paused.
 
 ```
 Last stored row: 2026-08-24T13:00

@@ -4,6 +4,24 @@ GitHub Actions pipeline architecture, scheduling, data flow, and troubleshooting
 
 ---
 
+## Project Status: Paused
+
+All GitHub Actions workflows are disabled in GitHub. The fine-grained `DATA_REPO_TOKEN` used for
+cross-repository pushes was deleted, and no scheduled model or forecast updates are running.
+
+The repository remains public as a demonstration of the completed system, including:
+
+- Approximately four months of development and GitHub Actions activity
+- Source code, tests, and CI/CD workflow definitions
+- Model training and evaluation evidence
+- Existing model and forecast artifacts in `karAQI-data`
+- The deployed Streamlit dashboard, which continues to serve the latest stored snapshot
+
+The workflows and setup instructions below describe the implementation while it was active. They
+are retained as documentation and are not currently running.
+
+---
+
 ## Pipeline Architecture
 
 ```
@@ -50,13 +68,13 @@ forecast_pipeline.yml (hourly :04)
 
 ## Pipeline Schedules
 
-| Pipeline | Cron (UTC) | Pakistan Time | Purpose | Duration |
-|---|---|---|---|---|
-| Feature | `1 * * * *` | XX:01 +5h | Incremental fetch, feature build, tests | ~1 min |
-| Forecast | `4 * * * *` | XX:04 +5h | Inference + JSON export | ~45 sec |
-| Training | `0 0 * * *` | 05:00 +5h | Incremental fetch, train Ridge + XGBoost, champion comparison, register, export | ~8 min |
+| Pipeline | Previous schedule (UTC) | Current status | Purpose |
+|---|---|---|---|
+| Feature | `1 * * * *` (`:01`) | **Paused** | Incremental fetch, feature build, tests |
+| Forecast | `4 * * * *` (`:04`) | **Paused** | Inference + JSON export |
+| Training | `0 0 * * *` (00:00) | **Paused** | Incremental fetch, train Ridge + XGBoost, champion comparison, register, export |
 
-### Why These Specific Minutes?
+### Why These Specific Minutes? (Historical Schedule)
 
 - **Feature at :01** — First to run each hour. Fetches latest data before forecast needs it.
 - **Forecast at :04** — Waits for feature pipeline to complete (typically takes ~1 min).
@@ -128,7 +146,7 @@ This ensures the pipeline either works correctly or fails visibly.
 
 ## Feature Pipeline Details
 
-The feature pipeline runs hourly and fetches only new data:
+When active, the feature pipeline runs hourly and fetches only new data:
 
 ```yaml
 - name: Fetch raw Open-Meteo data incrementally (keyless)

@@ -5,6 +5,12 @@
 
 A **72-hour US EPA AQI forecast** for Karak, Pakistan, built as an end-to-end machine learning pipeline with automated CI/CD, a feature store, model registry, and a live Streamlit dashboard. The system fetches hourly pollutant and weather data from Open-Meteo (free, keyless), trains multiple ML models daily, and serves pre-computed predictions to every dashboard visitor with near-instant page load.
 
+> **Project Status: PAUSED**
+>
+> The demonstration project is currently paused after approximately four months of active development and GitHub Actions activity. All scheduled workflows are disabled, and the fine-grained `DATA_REPO_TOKEN` has been deleted. Existing source commits, documentation, tests, model artifacts, evaluation files, and the latest saved forecast remain available as proof of the completed implementation.
+>
+> The live dashboard continues to display the latest forecasts and model outputs already stored in `karAQI-data`. It will not receive new automatic updates until the project is explicitly resumed.
+
 ## Project Name Explanation
 
 1. **KarAQI** stands for **Karak Air Quality Index**.
@@ -38,7 +44,7 @@ Most ML dashboards load the model at page load and run inference for every visit
 | Runtime inference | 5–15 seconds | Every page load | Every page load |
 | **Static JSON (karAQI)** | **< 1 second** | **None** | **None (cached 5 min)** |
 
-The tradeoff: predictions are at most 1 hour old (refreshed hourly by CI). For a weather/AQI dashboard, this is acceptable — conditions don't change faster than that.
+While the project is active, predictions are refreshed hourly by CI and are therefore at most 1 hour old. The project is now paused, so the dashboard serves the latest successfully generated snapshot rather than continuously current predictions.
 
 ---
 
@@ -86,19 +92,19 @@ feature_pipeline (hourly)               data/ (raw CSVs, feature store)
 
 ### CI/CD Pipeline Schedule
 
-All pipelines run on GitHub Actions. See [docs/cicd-pipelines.md](docs/cicd-pipelines.md) for the full architecture and troubleshooting history.
+The workflows are retained in the repository as a historical implementation, but all scheduled runs are currently disabled. See [docs/cicd-pipelines.md](docs/cicd-pipelines.md) for the full architecture and troubleshooting history.
 
 | Workflow | Schedule (UTC) | What it does | Output |
 |---|---|---|---|
-| `feature_pipeline.yml` | Hourly at `:01` | Incremental data fetch (~1 row), build features, backfill DuckDB, run tests | Feature store (DuckDB) |
-| `forecast_pipeline.yml` | Hourly at `:04` | Fetch ~1 new row, backfill DuckDB, load champion model from karAQI-data, run inference, fetch Open-Meteo AQ forecast (with retry), export JSON | `static_forecast.json` → karAQI-data |
-| `training_pipeline.yml` | Daily at `00:00` | Incremental fetch, train Ridge + XGBoost, rolling-origin evaluation, champion comparison, register in MLflow (model registry), export eval JSON | `model_eval.json` + model files → karAQI-data |
+| `feature_pipeline.yml` | **Paused** (previously hourly at `:01`) | Incremental data fetch (~1 row), build features, backfill DuckDB, run tests | Feature store (DuckDB) |
+| `forecast_pipeline.yml` | **Paused** (previously hourly at `:04`) | Fetch ~1 new row, backfill DuckDB, load champion model from karAQI-data, run inference, fetch Open-Meteo AQ forecast (with retry), export JSON | `static_forecast.json` → karAQI-data |
+| `training_pipeline.yml` | **Paused** (previously daily at `00:00`) | Incremental fetch, train Ridge + XGBoost, rolling-origin evaluation, champion comparison, register in MLflow (model registry), export eval JSON | `model_eval.json` + model files → karAQI-data |
 
-> **Incremental fetching:** The feature pipeline runs hourly and fetches only the new data since the last pull (typically ~1 row). Open-Meteo reanalysis data is immutable — historical values never change — so incremental fetching is safe and avoids re-downloading 4 years of data on every run. See [docs/data-sources.md](docs/data-sources.md).
+> **Incremental fetching:** When active, the feature pipeline runs hourly and fetches only the new data since the last pull (typically ~1 row). Open-Meteo reanalysis data is immutable — historical values never change — so incremental fetching is safe and avoids re-downloading 4 years of data on every run. The pipeline is currently paused. See [docs/data-sources.md](docs/data-sources.md).
 
 > **Champion comparison:** The training pipeline compares new model metrics against the current champion in MLflow. Only promotes if the new model is better on average RMSE across all output groups. If worse, the old champion is kept and the comparison is logged.
 
-> **GitHub Actions timing caveat:** Cron triggers are best-effort, not precise. Workflows are frequently delayed 5–30 minutes (sometimes longer) due to platform load — see [github/community#156282](https://github.com/orgs/community/discussions/156282). If the dashboard shows a previous hour's AQI, the CI pipeline was delayed. The data is still correct — it reflects the most recent successful run. See [docs/cicd-pipelines.md](docs/cicd-pipelines.md).
+> **GitHub Actions timing caveat:** While active, cron triggers are best-effort rather than precise and workflows can be delayed 5–30 minutes or longer — see [github/community#156282](https://github.com/orgs/community/discussions/156282). All workflows are currently paused, so the dashboard reflects the latest successful run rather than a live hourly refresh. See [docs/cicd-pipelines.md](docs/cicd-pipelines.md).
 
 ---
 
@@ -329,7 +335,7 @@ karAQI/
 
 1. [Streamlit Cloud](https://share.streamlit.io) → New app → `karAQI` → `app/dashboard.py`
 2. Ensure `karAQI-data` repo exists with the same owner
-3. Set `DATA_REPO_TOKEN` secret in karAQI repo settings (fine-grained PAT with Contents: Read/Write on karAQI-data only)
+3. The project is paused: no `DATA_REPO_TOKEN` secret or fine-grained PAT is currently required
 
 ---
 
